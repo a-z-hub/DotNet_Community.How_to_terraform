@@ -1,0 +1,11 @@
+{
+	"recommendations": [
+		"4ops.terraform",
+		"hashicorp.terraform",
+		"ms-azuretools.vscode-azureterraform",
+		"mohamedfaizal.tf-az-codesnippet",
+		"editorconfig.editorconfig"
+	],
+	"unwantedRecommendations": [
+	]
+}
