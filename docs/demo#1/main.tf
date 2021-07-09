@@ -15,10 +15,18 @@ resource "azuredevops_project" "default" {
   work_item_template = "Scrum"
 }
 
-resource "azuredevops_git_repository" "demo" {
+resource "azuredevops_git_repository" "repository-1" {
   project_id = azuredevops_project.default.id
-  name       = "How_to_Terraform_Git"
+  name       = "How_to_Terraform_Git_I"
   initialization {
-    init_type = "Uninitialized"
+    init_type = "Clean"
+  }
+}
+
+resource "azuredevops_git_repository" "repository-2" {
+  project_id = azuredevops_project.default.id
+  name       = "How_to_Terraform_Git_II"
+  initialization {
+    init_type = "Clean"
   }
 }
