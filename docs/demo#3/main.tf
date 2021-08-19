@@ -50,13 +50,15 @@ variable "tags" {
 /////////////////////////////////////////////////////////////////
 
 locals {
-  location              = "westeurope"
-  prefix                = format("dot-net-community-tf-%s", var.stage)
-  resource_group_name   = format("%s-rg", local.prefix)
-  app_service_plan_name = format("%s-plan", local.prefix)
-  back_app_service_name = format("%s-back-app", local.prefix)
-  back_app_service_url  = format("https://%s.azurewebsites.net", local.back_app_service_name)
-  tags                  = merge(var.tags, { "stage" = var.stage }, { "version" = var.ver })
+  location               = "westeurope"
+  prefix                 = format("dot-net-community-tf-%s", var.stage)
+  resource_group_name    = format("%s-rg", local.prefix)
+  app_service_plan_name  = format("%s-plan", local.prefix)
+  front_app_service_name = format("%s-front-app", local.prefix)
+  back_app_service_name  = format("%s-back-app", local.prefix)
+  front_app_service_url  = format("https://%s", azurerm_app_service.front_app_service.default_site_hostname)
+  back_app_service_url   = format("https://%s.azurewebsites.net", local.back_app_service_name)
+  tags                   = merge(var.tags, { "stage" = var.stage }, { "version" = var.ver })
 }
 
 /////////////////////////////////////////////////////////////////
@@ -78,11 +80,25 @@ resource "azurerm_app_service_plan" "app_service_plan" {
   tags = local.tags
 }
 
+resource "azurerm_app_service" "front_app_service" {
+  name                = local.front_app_service_name
+  location            = azurerm_resource_group.resource_group.location
+  resource_group_name = azurerm_resource_group.resource_group.name
+  app_service_plan_id = azurerm_app_service_plan.app_service_plan.id
+  app_settings = {
+    "API_URL" : local.back_app_service_url
+  }
+  tags = local.tags
+}
+
 resource "azurerm_app_service" "back_app_service" {
   name                = local.back_app_service_name
   location            = azurerm_resource_group.resource_group.location
   resource_group_name = azurerm_resource_group.resource_group.name
   app_service_plan_id = azurerm_app_service_plan.app_service_plan.id
+  app_settings = {
+    "AllowedOrigins" : local.front_app_service_url
+  }
   identity {
     type = "SystemAssigned"
   }
@@ -90,6 +106,10 @@ resource "azurerm_app_service" "back_app_service" {
 }
 
 /////////////////////////////////////////////////////////////////
+
+output "front_hostname" {
+  value = azurerm_app_service.front_app_service.default_site_hostname
+}
 
 output "back_hostname" {
   value = azurerm_app_service.back_app_service.default_site_hostname
