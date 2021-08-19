@@ -15,6 +15,18 @@ provider "azurerm" {
 
 /////////////////////////////////////////////////////////////////
 
+resource "random_password" "mssql_server_login_password" {
+  length           = 32
+  special          = true
+  min_upper        = 1
+  min_lower        = 1
+  min_numeric      = 1
+  min_special      = 1
+  override_special = "!@#%&?"
+}
+
+/////////////////////////////////////////////////////////////////
+
 variable "stage" {
   type = string
 
@@ -50,15 +62,21 @@ variable "tags" {
 /////////////////////////////////////////////////////////////////
 
 locals {
-  location               = "westeurope"
-  prefix                 = format("dot-net-community-tf-%s", var.stage)
-  resource_group_name    = format("%s-rg", local.prefix)
-  app_service_plan_name  = format("%s-plan", local.prefix)
-  front_app_service_name = format("%s-front-app", local.prefix)
-  back_app_service_name  = format("%s-back-app", local.prefix)
-  front_app_service_url  = format("https://%s", azurerm_app_service.front_app_service.default_site_hostname)
-  back_app_service_url   = format("https://%s.azurewebsites.net", local.back_app_service_name)
-  tags                   = merge(var.tags, { "stage" = var.stage }, { "version" = var.ver })
+  location                         = "westeurope"
+  prefix                           = format("dot-net-community-tf-%s", var.stage)
+  resource_group_name              = format("%s-rg", local.prefix)
+  app_service_plan_name            = format("%s-plan", local.prefix)
+  front_app_service_name           = format("%s-front-app", local.prefix)
+  back_app_service_name            = format("%s-back-app", local.prefix)
+  mssql_server_name                = format("%s-sql", local.prefix)
+  mssql_database_name              = format("%s-sqldb", local.prefix)
+  mssql_server_login               = "sa_account"
+  mssql_firewall_rule_name         = "allow_access_to_resources_and_services"
+  front_app_service_url            = format("https://%s", azurerm_app_service.front_app_service.default_site_hostname)
+  back_app_service_url             = format("https://%s.azurewebsites.net", local.back_app_service_name)
+  mssql_server_login_password      = random_password.mssql_server_login_password.result
+  mssql_database_connection_string = "Server=${azurerm_mssql_server.mssql_server.fully_qualified_domain_name};Database=${azurerm_mssql_database.mssql_database.name};User Id=${local.mssql_server_login};Password=${local.mssql_server_login_password};"
+  tags                             = merge(var.tags, { "stage" = var.stage }, { "version" = var.ver })
 }
 
 /////////////////////////////////////////////////////////////////
@@ -98,6 +116,7 @@ resource "azurerm_app_service" "back_app_service" {
   app_service_plan_id = azurerm_app_service_plan.app_service_plan.id
   app_settings = {
     "AllowedOrigins" : local.front_app_service_url
+    "ConnectionString" : local.mssql_database_connection_string
   }
   identity {
     type = "SystemAssigned"
@@ -105,7 +124,35 @@ resource "azurerm_app_service" "back_app_service" {
   tags = local.tags
 }
 
+resource "azurerm_mssql_server" "mssql_server" {
+  name                         = local.mssql_server_name
+  location                     = azurerm_resource_group.resource_group.location
+  resource_group_name          = azurerm_resource_group.resource_group.name
+  version                      = "12.0"
+  administrator_login          = local.mssql_server_login
+  administrator_login_password = local.mssql_server_login_password
+  tags                         = local.tags
+}
+
+resource "azurerm_mssql_firewall_rule" "allow_azure_services_and_resources_access_to_server" {
+  name             = local.mssql_firewall_rule_name
+  server_id        = azurerm_mssql_server.mssql_server.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+
+resource "azurerm_mssql_database" "mssql_database" {
+  name      = local.mssql_database_name
+  server_id = azurerm_mssql_server.mssql_server.id
+  tags      = local.tags
+}
+
 /////////////////////////////////////////////////////////////////
+
+output "mssql_database_connection_string" {
+  value     = local.mssql_database_connection_string
+  sensitive = true
+}
 
 output "front_hostname" {
   value = azurerm_app_service.front_app_service.default_site_hostname
@@ -113,4 +160,12 @@ output "front_hostname" {
 
 output "back_hostname" {
   value = azurerm_app_service.back_app_service.default_site_hostname
+}
+
+output "mssql_database_sku_name" {
+  value = azurerm_mssql_database.mssql_database.sku_name
+}
+
+output "mssql_database_price" {
+  value = "${azurerm_mssql_database.mssql_database.sku_name}, monthly cost: 371.87$"
 }
